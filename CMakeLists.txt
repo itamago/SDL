@@ -132,7 +132,16 @@ elseif(APPLE)
     set(MACOSX TRUE)
   elseif(CMAKE_SYSTEM_NAME MATCHES ".*tvOS.*")
     set(TVOS TRUE)
+  elseif(CMAKE_SYSTEM_NAME MATCHES ".*iOS.*")
+    set(IOS TRUE)
   endif()
+  message("-------------------------> CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+  message("-------------------------> DARWIN = ${DARWIN}")
+  message("-------------------------> MACOSX = ${MACOSX}")
+  message("-------------------------> TVOS   = ${TVOS}")
+  message("-------------------------> IOS    = ${IOS}")
+  message("-------------------------> CMAKE_OSX_SYSROOT = ${CMAKE_OSX_SYSROOT}")
+  message("-------------------------> CMAKE_OSX_ARCHITECTURES = ${CMAKE_OSX_ARCHITECTURES}")
   # TODO: iOS?
 elseif(CMAKE_SYSTEM_NAME MATCHES "BeOS.*")
   message_error("BeOS support has been removed as of SDL 2.0.2.")
@@ -393,6 +402,7 @@ set_option(RENDER_D3D          "Enable the Direct3D render driver" ${WINDOWS})
 set_option(RENDER_METAL        "Enable the Metal render driver" ${APPLE})
 set_option(VIDEO_VIVANTE       "Use Vivante EGL video driver" ${UNIX_SYS})
 dep_option(VIDEO_VULKAN        "Enable Vulkan support" ON "ANDROID OR APPLE OR LINUX OR WINDOWS" OFF)
+
 set_option(VIDEO_METAL         "Enable Metal support" ${APPLE})
 set_option(VIDEO_KMSDRM        "Use KMS DRM video driver" ${UNIX_SYS})
 dep_option(KMSDRM_SHARED       "Dynamically load KMS DRM support" ON "VIDEO_KMSDRM" OFF)
@@ -402,6 +412,18 @@ option_string(FOREGROUNDING_SIGNAL "number to use for magic foregrounding signal
 set_option(HIDAPI              "Use HIDAPI for low level joystick drivers" ${OPT_DEF_HIDAPI})
 set_option(JOYSTICK_VIRTUAL    "Enable the virtual-joystick driver" ON)
 set_option(ASAN                "Use AddressSanitizer to detect memory errors" OFF)
+
+# [PDA 2021-02-13] disable HIDAPI due to fail at link
+set(HIDAPI OFF)
+
+message("Option VIDEO_COCOA  = ${VIDEO_COCOA}")
+message("Option RENDER_METAL = ${RENDER_METAL}")
+message("Option VIDEO_METAL  = ${VIDEO_METAL}")
+message("Option VIDEO_VULKAN = ${VIDEO_VULKAN}")
+message("Option RENDER_D3D   = ${RENDER_D3D}")
+message("Option SDL_VIDEO    = ${SDL_VIDEO}")
+
+
 
 set(SDL_SHARED ${SDL_SHARED_ENABLED_BY_DEFAULT} CACHE BOOL "Build a shared version of the library")
 set(SDL_STATIC ${SDL_STATIC_ENABLED_BY_DEFAULT} CACHE BOOL "Build a static version of the library")
@@ -528,7 +550,7 @@ if(USE_GCC OR USE_CLANG)
   endif()
 
   if(APPLE)
-    list(APPEND EXTRA_LDFLAGS "-Wl,-undefined,error")
+    # list(APPEND EXTRA_LDFLAGS "-Wl,-undefined,error")
     list(APPEND EXTRA_LDFLAGS "-Wl,-compatibility_version,${DYLIB_COMPATIBILITY_VERSION}")
     list(APPEND EXTRA_LDFLAGS "-Wl,-current_version,${DYLIB_CURRENT_VERSION}")
   elseif(NOT OPENBSD)
@@ -1662,8 +1684,11 @@ elseif(APPLE)
   if(DARWIN OR MACOSX)
     set(SDL_FRAMEWORK_COCOA 1)
     set(SDL_FRAMEWORK_CARBON 1)
+  elseif(IOS)
+    set(SDL_FRAMEWORK_UIKIT 1)
   endif()
   set(SDL_FRAMEWORK_FOUNDATION 1)
+
 
   # Requires the darwin file implementation
   if(SDL_FILE)
@@ -1686,6 +1711,11 @@ elseif(APPLE)
   endif()
   set(SOURCE_FILES ${SOURCE_FILES} ${MISC_SOURCES})
   set(HAVE_SDL_MISC TRUE)
+
+  if(IOS OR TVOS)
+    file(GLOB IOS_MAIN_SOURCES ${SDL2_SOURCE_DIR}/src/main/uikit/*.c)
+    set(SDLMAIN_SOURCES ${SDLMAIN_SOURCES} ${IOS_MAIN_SOURCES})
+  endif()
 
   if(SDL_AUDIO)
     set(SDL_AUDIO_DRIVER_COREAUDIO 1)
@@ -1789,6 +1819,7 @@ elseif(APPLE)
 
   # iOS hack needed - http://code.google.com/p/ios-cmake/ ?
   if(SDL_VIDEO)
+
     if (IOS OR TVOS)
       set(SDL_VIDEO_DRIVER_UIKIT 1)
       set(SDL_FRAMEWORK_COREGRAPHICS 1)
@@ -1822,22 +1853,26 @@ elseif(APPLE)
     endif()
 
     if(VIDEO_VULKAN OR VIDEO_METAL OR RENDER_METAL)
+
       set(ORIG_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
       set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -ObjC")
-      check_c_source_compiles("
-        #include <AvailabilityMacros.h>
-        #import <Metal/Metal.h>
-        #import <QuartzCore/CAMetalLayer.h>
+      # check_c_source_compiles("
+      #   #include <AvailabilityMacros.h>
+      #   #import <Metal/Metal.h>
+      #   #import <QuartzCore/CAMetalLayer.h>
 
-        #if TARGET_OS_SIMULATOR || (!TARGET_CPU_X86_64 && !TARGET_CPU_ARM64)
-        #error Metal doesn't work on this configuration
-        #endif
-        int main()
-        {
-            return 0;
-        }
-        " HAVE_FRAMEWORK_METAL)
+      #   #if TARGET_OS_SIMULATOR || (!TARGET_CPU_X86_64 && !TARGET_CPU_ARM64)
+      #   #error Metal doesn't work on this configuration
+      #   #endif
+      #   int main()
+      #   {
+      #       return 0;
+      #   }
+      #   " HAVE_FRAMEWORK_METAL)
+      set(HAVE_FRAMEWORK_METAL 1)
       set(CMAKE_REQUIRED_FLAGS ${ORIG_CMAKE_REQUIRED_FLAGS})
+
+      message("=================================> HAVE_FRAMEWORK_METAL = ${HAVE_FRAMEWORK_METAL}")
       if(HAVE_FRAMEWORK_METAL)
         set(SDL_FRAMEWORK_METAL 1)
         set(SDL_FRAMEWORK_QUARTZCORE 1)
@@ -1851,6 +1886,7 @@ elseif(APPLE)
     if(VIDEO_METAL)
       set(SDL_VIDEO_METAL 1)
       set(HAVE_VIDEO_METAL TRUE)
+      message("SDL_VIDEO_METAL ================> ON")
     endif()
 
     if(RENDER_METAL)
@@ -2008,6 +2044,7 @@ endif()
 if(VIDEO_VULKAN)
   set(SDL_VIDEO_VULKAN 1)
   set(HAVE_VIDEO_VULKAN TRUE)
+  message("SDL_VIDEO_VULKAN =====================> ON")
 endif()
 
 # Dummies
