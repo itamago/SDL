@@ -433,6 +433,7 @@ set_option(SDL_TEST            "Build the test directory" OFF)
 
 # General source files
 file(GLOB SOURCE_FILES
+  ${SDL2_SOURCE_DIR}/include
   ${SDL2_SOURCE_DIR}/src/*.c
   ${SDL2_SOURCE_DIR}/src/atomic/*.c
   ${SDL2_SOURCE_DIR}/src/audio/*.c
